@@ -37,7 +37,7 @@
 
       <div v-if="activity.campaignViews && activity.campaignViews.length > 0">
         <b-table :data="activity.campaignViews" hoverable default-sort="lastViewedAt" default-sort-direction="desc"
-          paginated :per-page="10" class="campaign-views-table">
+          paginated :per-page="10" :pagination-simple="false" class="campaign-views-table">
           <b-table-column v-slot="props" field="subject" :label="$tc('globals.terms.campaign', 1)" sortable>
             <div v-if="props.row.uuid">
               <router-link :to="{ name: 'campaign', params: { id: props.row.id } }">
@@ -76,7 +76,7 @@
 
       <div v-if="activity.linkClicks && activity.linkClicks.length > 0">
         <b-table :data="activity.linkClicks" hoverable default-sort="lastClickedAt" default-sort-direction="desc"
-          paginated :per-page="10" class="link-clicks-table">
+          paginated :per-page="10" :pagination-simple="false" class="link-clicks-table">
           <b-table-column v-slot="props" field="url" :label="$t('subscribers.activity.url')" sortable>
             <a :href="props.row.url" target="_blank" rel="noopener noreferrer" class="is-size-7">
               {{ props.row.url }}
