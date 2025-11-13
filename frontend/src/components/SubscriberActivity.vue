@@ -1,7 +1,7 @@
 <template>
   <div class="subscriber-activity">
     <div v-if="isLoading" class="has-text-centered">
-      <b-loading :active="true" :is-full-page="false"></b-loading>
+      <b-loading :active="true" :is-full-page="false" />
     </div>
 
     <div v-else>
