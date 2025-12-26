@@ -288,8 +288,9 @@ func (m *Manager) updateLogFailed(l pendingLog, statusCode int, responseBody, er
 func (m *Manager) handleDeliveryError(l pendingLog, statusCode int, responseBody, errMsg string) {
 	attempts := l.Attempts + 1
 
-	// Check if we've exhausted retries.
-	if attempts >= l.MaxRetries {
+	// Check if we've exhausted retries. MaxRetries represents the number of retry
+	// attempts allowed after the initial delivery attempt.
+	if attempts > l.MaxRetries {
 		m.updateLogFailed(l, statusCode, responseBody, errMsg)
 		return
 	}

@@ -83,11 +83,12 @@ func (c *Core) CreateWebhook(w models.Webhook) (models.Webhook, error) {
 		w.AuthType = models.WebhookAuthTypeNone
 	}
 
-	// Set defaults.
-	if w.Status == "" {
+	// Validate and set default status.
+	if w.Status != models.WebhookStatusEnabled &&
+		w.Status != models.WebhookStatusDisabled {
 		w.Status = models.WebhookStatusEnabled
 	}
-	if w.MaxRetries <= 0 {
+	if w.MaxRetries < 0 {
 		w.MaxRetries = 3
 	}
 	if w.RetryInterval == "" {
