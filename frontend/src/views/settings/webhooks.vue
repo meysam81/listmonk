@@ -101,13 +101,6 @@
                 </b-field>
               </div>
               <div class="column is-4">
-                <b-field :label="$t('settings.webhooks.retryInterval')" label-position="on-border"
-                  :message="$t('settings.webhooks.retryIntervalHelp')">
-                  <b-input v-model="item.retry_interval" name="retry_interval" placeholder="30s"
-                    :pattern="regDuration" :maxlength="10" />
-                </b-field>
-              </div>
-              <div class="column is-4">
                 <b-field :label="$t('settings.webhooks.timeout')" label-position="on-border"
                   :message="$t('settings.webhooks.timeoutHelp')">
                   <b-input v-model="item.timeout" name="timeout" placeholder="30s"
@@ -115,7 +108,6 @@
                 </b-field>
               </div>
             </div>
-            <hr />
           </div>
         </div><!-- second container column -->
       </div><!-- block -->
@@ -155,14 +147,12 @@ export default Vue.extend({
         enabled: true,
         name: '',
         url: '',
-        status: 'enabled',
         events: [],
         auth_type: 'none',
         auth_basic_user: '',
         auth_basic_pass: '',
         auth_hmac_secret: '',
         max_retries: 3,
-        retry_interval: '30s',
         timeout: '30s',
       });
 

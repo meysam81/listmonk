@@ -1,6 +1,5 @@
 // Package webhooks implements an outgoing webhook delivery system for listmonk.
-// It handles the delivery of events to configured webhook endpoints with
-// retry logic, HMAC signatures, and delivery logging.
+// It delivers events to configured webhook endpoints with retry logic and HMAC signatures.
 package webhooks
 
 import (
@@ -16,106 +15,99 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jmoiron/sqlx"
 	"github.com/knadh/listmonk/models"
 )
 
+// Webhook represents a webhook configuration loaded from settings.
+type Webhook struct {
+	UUID           string
+	Enabled        bool
+	Name           string
+	URL            string
+	Events         []string
+	AuthType       string
+	AuthBasicUser  string
+	AuthBasicPass  string
+	AuthHMACSecret string
+	MaxRetries     int
+	Timeout        time.Duration
+}
+
 // Manager handles webhook event delivery.
 type Manager struct {
-	opts   Opt
-	log    *log.Logger
-	client *http.Client
-
-	mu        sync.RWMutex
-	isRunning bool
-	stopCh    chan struct{}
-	wg        sync.WaitGroup
-}
-
-// Opt contains options for initializing the webhook manager.
-type Opt struct {
-	DB       *sqlx.DB
-	Queries  *Queries
-	Log      *log.Logger
-	Workers  int
-	Interval time.Duration
-}
-
-// Queries contains prepared SQL queries for webhook operations.
-type Queries struct {
-	GetWebhooksByEvent    *sqlx.Stmt
-	CreateWebhookLog      *sqlx.Stmt
-	UpdateWebhookLog      *sqlx.Stmt
-	GetPendingWebhookLogs *sqlx.Stmt
+	webhooks []Webhook
+	log      *log.Logger
+	mu       sync.RWMutex
 }
 
 // New creates a new webhook manager.
-func New(opt Opt) *Manager {
-	if opt.Workers <= 0 {
-		opt.Workers = 2
-	}
-	if opt.Interval <= 0 {
-		opt.Interval = 5 * time.Second
-	}
-
+func New(log *log.Logger) *Manager {
 	return &Manager{
-		opts: opt,
-		log:  opt.Log,
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		stopCh: make(chan struct{}),
+		webhooks: []Webhook{},
+		log:      log,
 	}
 }
 
-// Run starts the webhook delivery workers.
-func (m *Manager) Run() {
+// Load loads webhooks from settings into memory.
+func (m *Manager) Load(settings []struct {
+	UUID           string   `json:"uuid"`
+	Enabled        bool     `json:"enabled"`
+	Name           string   `json:"name"`
+	URL            string   `json:"url"`
+	Events         []string `json:"events"`
+	AuthType       string   `json:"auth_type"`
+	AuthBasicUser  string   `json:"auth_basic_user"`
+	AuthBasicPass  string   `json:"auth_basic_pass,omitempty"`
+	AuthHMACSecret string   `json:"auth_hmac_secret,omitempty"`
+	MaxRetries     int      `json:"max_retries"`
+	Timeout        string   `json:"timeout"`
+}) {
 	m.mu.Lock()
-	if m.isRunning {
-		m.mu.Unlock()
-		return
-	}
-	m.isRunning = true
-	m.mu.Unlock()
+	defer m.mu.Unlock()
 
-	m.log.Printf("starting webhook manager with %d workers", m.opts.Workers)
+	m.webhooks = make([]Webhook, 0, len(settings))
+	for _, s := range settings {
+		if !s.Enabled {
+			continue
+		}
 
-	// Start worker goroutines.
-	for i := 0; i < m.opts.Workers; i++ {
-		m.wg.Add(1)
-		go m.worker(i)
+		// Parse timeout with default.
+		timeout, err := time.ParseDuration(s.Timeout)
+		if err != nil || timeout <= 0 {
+			timeout = 30 * time.Second
+		}
+
+		// Default max retries.
+		maxRetries := s.MaxRetries
+		if maxRetries <= 0 {
+			maxRetries = 3
+		}
+
+		m.webhooks = append(m.webhooks, Webhook{
+			UUID:           s.UUID,
+			Enabled:        s.Enabled,
+			Name:           s.Name,
+			URL:            s.URL,
+			Events:         s.Events,
+			AuthType:       s.AuthType,
+			AuthBasicUser:  s.AuthBasicUser,
+			AuthBasicPass:  s.AuthBasicPass,
+			AuthHMACSecret: s.AuthHMACSecret,
+			MaxRetries:     maxRetries,
+			Timeout:        timeout,
+		})
 	}
+
+	m.log.Printf("loaded %d webhook(s)", len(m.webhooks))
 }
 
-// Close stops the webhook manager.
-func (m *Manager) Close() {
-	m.mu.Lock()
-	if !m.isRunning {
-		m.mu.Unlock()
-		return
-	}
-	m.isRunning = false
-	m.mu.Unlock()
-
-	close(m.stopCh)
-	m.wg.Wait()
-	m.log.Println("webhook manager stopped")
-}
-
-// Trigger queues an event for delivery to all matching webhooks.
+// Trigger fires all webhooks subscribed to the given event.
+// Delivery happens asynchronously in goroutines.
 func (m *Manager) Trigger(event string, data any) error {
-	// Get all enabled webhooks that are subscribed to this event.
-	var webhooks []models.Webhook
-	if err := m.opts.Queries.GetWebhooksByEvent.Select(&webhooks, event); err != nil {
-		m.log.Printf("error getting webhooks for event %s: %v", event, err)
-		return err
-	}
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 
-	if len(webhooks) == 0 {
-		return nil
-	}
-
-	// Build the event payload.
+	// Build the event payload once.
 	payload := models.WebhookEvent{
 		Event:     event,
 		Timestamp: time.Now().UTC(),
@@ -128,119 +120,102 @@ func (m *Manager) Trigger(event string, data any) error {
 		return err
 	}
 
-	// Create a log entry for each webhook to be delivered.
-	for _, wh := range webhooks {
-		_, err := m.opts.Queries.CreateWebhookLog.Exec(
-			wh.ID,
-			event,
-			wh.URL,
-			payloadBytes,
-			models.WebhookLogStatusPending,
-			nil, // next_retry_at is null for immediate delivery
-		)
-		if err != nil {
-			m.log.Printf("error creating webhook log for webhook %d: %v", wh.ID, err)
+	// Fire webhooks that are subscribed to this event.
+	for _, wh := range m.webhooks {
+		if !m.isSubscribed(wh, event) {
+			continue
 		}
+
+		// Deliver asynchronously.
+		go m.deliver(wh, event, payloadBytes)
 	}
 
 	return nil
 }
 
-// worker processes pending webhook deliveries.
-func (m *Manager) worker(id int) {
-	defer m.wg.Done()
-
-	ticker := time.NewTicker(m.opts.Interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-m.stopCh:
-			return
-		case <-ticker.C:
-			m.processPendingLogs()
+// isSubscribed checks if a webhook is subscribed to the given event.
+func (m *Manager) isSubscribed(wh Webhook, event string) bool {
+	for _, e := range wh.Events {
+		if e == event {
+			return true
 		}
 	}
+	return false
 }
 
-// pendingLog represents a pending webhook log with associated webhook info.
-type pendingLog struct {
-	models.WebhookLog
-	MaxRetries     int    `db:"max_retries"`
-	Timeout        string `db:"timeout"`
-	AuthType       string `db:"auth_type"`
-	AuthBasicUser  string `db:"auth_basic_user"`
-	AuthBasicPass  string `db:"auth_basic_pass"`
-	AuthHMACSecret string `db:"auth_hmac_secret"`
+// deliver attempts to deliver a webhook with retries.
+func (m *Manager) deliver(wh Webhook, event string, payload []byte) {
+	var lastErr error
+
+	for attempt := 0; attempt <= wh.MaxRetries; attempt++ {
+		if attempt > 0 {
+			// Exponential backoff: 1s, 2s, 4s, 8s, ...
+			backoff := time.Duration(1<<uint(attempt-1)) * time.Second
+			if backoff > 30*time.Second {
+				backoff = 30 * time.Second
+			}
+			time.Sleep(backoff)
+		}
+
+		err := m.send(wh, event, payload)
+		if err == nil {
+			if attempt > 0 {
+				m.log.Printf("webhook %s delivered after %d retries", wh.Name, attempt)
+			}
+			return
+		}
+
+		lastErr = err
+		m.log.Printf("webhook %s delivery attempt %d failed: %v", wh.Name, attempt+1, err)
+	}
+
+	m.log.Printf("webhook %s delivery failed after %d attempts: %v", wh.Name, wh.MaxRetries+1, lastErr)
 }
 
-// processPendingLogs fetches and processes pending webhook deliveries.
-func (m *Manager) processPendingLogs() {
-	var logs []pendingLog
-	if err := m.opts.Queries.GetPendingWebhookLogs.Select(&logs, 100); err != nil {
-		m.log.Printf("error fetching pending webhook logs: %v", err)
-		return
-	}
-
-	for _, l := range logs {
-		m.deliverWebhook(l)
-	}
-}
-
-// deliverWebhook attempts to deliver a webhook and updates the log.
-func (m *Manager) deliverWebhook(l pendingLog) {
-	// Parse timeout.
-	timeout, err := time.ParseDuration(l.Timeout)
-	if err != nil {
-		timeout = 30 * time.Second
-	}
-
+// send makes an HTTP request to deliver the webhook.
+func (m *Manager) send(wh Webhook, event string, payload []byte) error {
 	// Create HTTP request.
-	req, err := http.NewRequest(http.MethodPost, l.URL, bytes.NewReader(l.Payload))
+	req, err := http.NewRequest(http.MethodPost, wh.URL, bytes.NewReader(payload))
 	if err != nil {
-		m.updateLogFailed(l, 0, "", fmt.Sprintf("error creating request: %v", err))
-		return
+		return fmt.Errorf("creating request: %w", err)
 	}
 
 	// Set headers.
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "listmonk-webhook/1.0")
-	req.Header.Set("X-Listmonk-Event", l.Event)
-	req.Header.Set("X-Listmonk-Delivery", fmt.Sprintf("%d", l.ID))
+	req.Header.Set("X-Listmonk-Event", event)
 
 	// Apply authentication.
-	switch l.AuthType {
+	switch wh.AuthType {
 	case models.WebhookAuthTypeBasic:
-		req.SetBasicAuth(l.AuthBasicUser, l.AuthBasicPass)
+		req.SetBasicAuth(wh.AuthBasicUser, wh.AuthBasicPass)
 
 	case models.WebhookAuthTypeHMAC:
 		timestamp := time.Now().Unix()
-		signature := m.computeHMAC(l.Payload, l.AuthHMACSecret, timestamp)
+		signature := m.computeHMAC(payload, wh.AuthHMACSecret, timestamp)
 		req.Header.Set("X-Listmonk-Signature", signature)
 		req.Header.Set("X-Listmonk-Timestamp", fmt.Sprintf("%d", timestamp))
 	}
 
 	// Create a client with the specific timeout.
-	client := &http.Client{Timeout: timeout}
+	client := &http.Client{Timeout: wh.Timeout}
 
 	// Make the request.
 	resp, err := client.Do(req)
 	if err != nil {
-		m.handleDeliveryError(l, 0, "", fmt.Sprintf("request failed: %v", err))
-		return
+		return fmt.Errorf("request failed: %w", err)
 	}
-	defer resp.Body.Close()
-
-	// Read response body (limit to 1KB to prevent memory issues).
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
-	bodyStr := string(body)
+	defer func() {
+		io.Copy(io.Discard, resp.Body)
+		resp.Body.Close()
+	}()
 
 	// Check if delivery was successful (2xx status).
-	if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-		m.updateLogSuccess(l, resp.StatusCode, bodyStr)
-	} else {
-		m.handleDeliveryError(l, resp.StatusCode, bodyStr, fmt.Sprintf("non-2xx status: %d", resp.StatusCode))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("non-2xx status: %d", resp.StatusCode)
 	}
+
+	return nil
 }
 
 // computeHMAC computes the HMAC-SHA256 signature for the payload.
@@ -252,67 +227,7 @@ func (m *Manager) computeHMAC(payload []byte, secret string, timestamp int64) st
 	return "sha256=" + hex.EncodeToString(h.Sum(nil))
 }
 
-// updateLogSuccess marks a webhook log as successfully delivered.
-func (m *Manager) updateLogSuccess(l pendingLog, statusCode int, responseBody string) {
-	_, err := m.opts.Queries.UpdateWebhookLog.Exec(
-		l.ID,
-		models.WebhookLogStatusSuccess,
-		statusCode,
-		responseBody,
-		"",
-		l.Attempts+1,
-		nil, // next_retry_at
-	)
-	if err != nil {
-		m.log.Printf("error updating webhook log %d: %v", l.ID, err)
-	}
-}
-
-// updateLogFailed marks a webhook log as permanently failed.
-func (m *Manager) updateLogFailed(l pendingLog, statusCode int, responseBody, errMsg string) {
-	_, err := m.opts.Queries.UpdateWebhookLog.Exec(
-		l.ID,
-		models.WebhookLogStatusFailed,
-		statusCode,
-		responseBody,
-		errMsg,
-		l.Attempts+1,
-		nil, // next_retry_at
-	)
-	if err != nil {
-		m.log.Printf("error updating webhook log %d: %v", l.ID, err)
-	}
-}
-
-// handleDeliveryError handles a failed delivery attempt, scheduling a retry if allowed.
-func (m *Manager) handleDeliveryError(l pendingLog, statusCode int, responseBody, errMsg string) {
-	attempts := l.Attempts + 1
-
-	// Check if we've exhausted retries. MaxRetries represents the number of retry
-	// attempts allowed after the initial delivery attempt.
-	if attempts > l.MaxRetries {
-		m.updateLogFailed(l, statusCode, responseBody, errMsg)
-		return
-	}
-
-	// Calculate next retry time with exponential backoff.
-	// 30s, 2m, 8m, 32m, 2h (approximately)
-	backoff := time.Duration(1<<uint(attempts)) * 30 * time.Second
-	if backoff > 2*time.Hour {
-		backoff = 2 * time.Hour
-	}
-	nextRetry := time.Now().Add(backoff)
-
-	_, err := m.opts.Queries.UpdateWebhookLog.Exec(
-		l.ID,
-		models.WebhookLogStatusPending, // Keep pending for retry
-		statusCode,
-		responseBody,
-		errMsg,
-		attempts,
-		nextRetry,
-	)
-	if err != nil {
-		m.log.Printf("error scheduling retry for webhook log %d: %v", l.ID, err)
-	}
+// Close is a no-op for the settings-based manager.
+func (m *Manager) Close() {
+	// No cleanup needed for settings-based manager.
 }

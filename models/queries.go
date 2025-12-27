@@ -134,20 +134,6 @@ type Queries struct {
 	DeleteRole            *sqlx.Stmt `query:"delete-role"`
 	UpsertListPermissions *sqlx.Stmt `query:"upsert-list-permissions"`
 	DeleteListPermission  *sqlx.Stmt `query:"delete-list-permission"`
-
-	// Webhooks.
-	CreateWebhook     *sqlx.Stmt `query:"create-webhook"`
-	GetWebhooks       *sqlx.Stmt `query:"get-webhooks"`
-	GetWebhooksByEvent *sqlx.Stmt `query:"get-webhooks-by-event"`
-	UpdateWebhook     *sqlx.Stmt `query:"update-webhook"`
-	DeleteWebhooks    *sqlx.Stmt `query:"delete-webhooks"`
-
-	// Webhook logs.
-	CreateWebhookLog      *sqlx.Stmt `query:"create-webhook-log"`
-	UpdateWebhookLog      *sqlx.Stmt `query:"update-webhook-log"`
-	GetPendingWebhookLogs *sqlx.Stmt `query:"get-pending-webhook-logs"`
-	QueryWebhookLogs      string     `query:"query-webhook-logs"`
-	DeleteWebhookLogs     *sqlx.Stmt `query:"delete-webhook-logs"`
 }
 
 // compileSubscriberQueryTpl takes an arbitrary WHERE expressions

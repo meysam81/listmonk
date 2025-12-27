@@ -243,23 +243,15 @@ func main() {
 	}
 
 	// Initialize the webhook manager for outgoing event webhooks.
-	webhookMgr := webhooks.New(webhooks.Opt{
-		DB:      db,
-		Queries: &webhooks.Queries{
-			GetWebhooksByEvent:    queries.GetWebhooksByEvent,
-			CreateWebhookLog:      queries.CreateWebhookLog,
-			UpdateWebhookLog:      queries.UpdateWebhookLog,
-			GetPendingWebhookLogs: queries.GetPendingWebhookLogs,
-		},
-		Log:      lo,
-		Workers:  2,
-		Interval: 5 * time.Second,
-	})
+	webhookMgr := webhooks.New(lo)
+
+	// Load webhooks from settings.
+	if settings, err := core.GetSettings(); err == nil {
+		webhookMgr.Load(settings.Webhooks)
+	}
 
 	// Set the webhook trigger hook in core so that CRUD operations can trigger webhooks.
 	core.SetWebhookHook(webhookMgr.Trigger)
-
-	go webhookMgr.Run()
 
 	// Start cronjobs.
 	initCron(core, db)

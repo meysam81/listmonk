@@ -73,13 +73,5 @@
             "settings:manage",
             "settings:maintain"
         ]
-    },
-    {
-        "group": "webhooks",
-        "permissions":
-        [
-            "webhooks:get",
-            "webhooks:manage"
-        ]
     }
 ]

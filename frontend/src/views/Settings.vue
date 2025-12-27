@@ -196,9 +196,6 @@ export default Vue.extend({
 
       // Webhook secrets.
       for (let i = 0; i < form.webhooks.length; i += 1) {
-        // Convert enabled boolean to status string.
-        form.webhooks[i].status = form.webhooks[i].enabled ? 'enabled' : 'disabled';
-
         // If it's the dummy UI password placeholder, ignore it.
         if (this.isDummy(form.webhooks[i].auth_basic_pass)) {
           form.webhooks[i].auth_basic_pass = '';
