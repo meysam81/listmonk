@@ -211,7 +211,7 @@ describe('Campaigns', () => {
 
   it('Adds new campaigns', () => {
     const lists = [[1], [1, 2]];
-    const cTypes = ['richtext', 'html', 'markdown', 'plain', 'visual'];
+    const cTypes = ['richtext', 'html', 'markdown', 'plain', 'visual', 'mjml'];
 
     let n = 0;
     cTypes.forEach((c) => {
@@ -296,6 +296,14 @@ describe('Campaigns', () => {
             cy.wrap(el.contents()).find('table td').click();
             cy.wait(200);
             cy.wrap(el.contents()).find('textarea').eq(0).type(plainBody);
+          });
+        } else if (c === 'mjml') {
+          const mjmlBody = `<mjml><mj-body><mj-section><mj-column><mj-text>hello${n} {{ .Subscriber.Name }} from {{ .Subscriber.Attribs.city }}</mj-text></mj-column></mj-section></mj-body></mjml>`;
+          cy.get('[contenteditable="true"]').then(($el) => {
+            cy.window().then((win) => {
+              $el.focus();
+              win.document.execCommand('insertText', false, mjmlBody);
+            });
           });
         }
 

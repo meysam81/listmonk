@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 
+	"github.com/preslavrachev/gomjml/mjml"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
@@ -86,6 +87,11 @@ var markdown = goldmark.New(
 		),
 	),
 )
+
+// CompileMJML compiles MJML markup to responsive HTML.
+func CompileMJML(input string) (string, error) {
+	return mjml.Render(input)
+}
 
 // Headers represents an array of string maps used to represent SMTP, HTTP headers etc.
 // similar to url.Values{}

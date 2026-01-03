@@ -78,6 +78,7 @@
     "campaigns.richText": "Rich text",
     "campaigns.importVisualTemplate": "Import visual template",
     "campaigns.visual": "Visual",
+    "campaigns.mjml": "MJML",
     "campaigns.format": "Format",
     "campaigns.schedule": "Schedule campaign",
     "campaigns.scheduled": "Scheduled",

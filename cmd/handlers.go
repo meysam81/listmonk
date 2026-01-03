@@ -188,6 +188,8 @@ func initHTTPHandlers(e *echo.Echo, a *App) {
 		g.PUT("/api/templates/:id/default", pm(hasID(a.TemplateSetDefault), "templates:manage"))
 		g.DELETE("/api/templates/:id", pm(hasID(a.DeleteTemplate), "templates:manage"))
 
+		g.POST("/api/mjml", pm(a.CompileMJML, "campaigns:manage_all", "campaigns:manage"))
+
 		g.DELETE("/api/maintenance/subscribers/:type", pm(a.GCSubscribers, "settings:maintain"))
 		g.DELETE("/api/maintenance/analytics/:type", pm(a.GCCampaignAnalytics, "settings:maintain"))
 		g.DELETE("/api/maintenance/subscriptions/unconfirmed", pm(a.GCSubscriptions, "settings:maintain"))
