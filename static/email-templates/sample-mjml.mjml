@@ -1,0 +1,59 @@
+<mjml>
+  <mj-head>
+    <mj-title>{{ .Campaign.Subject }}</mj-title>
+    <mj-preview>Preview text for {{ .Campaign.Name }}</mj-preview>
+    <mj-attributes>
+      <mj-all font-family="'Helvetica Neue', Helvetica, Arial, sans-serif" />
+      <mj-text font-size="15px" line-height="1.6" color="#444444" />
+      <mj-button background-color="#0055d4" border-radius="3px" font-weight="bold" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#f0f1f3">
+    <!-- Header Section -->
+    <mj-section padding="20px 0">
+      <mj-column>
+        <mj-text align="center" font-size="24px" font-weight="bold" color="#333333">
+          Newsletter
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <!-- Main Content Section -->
+    <mj-section background-color="#ffffff" border-radius="5px" padding="30px">
+      <mj-column>
+        <mj-text font-size="18px" font-weight="bold" color="#333333">
+          Hello {{ .Subscriber.FirstName }}!
+        </mj-text>
+        <mj-text>
+          Welcome to our newsletter. We're excited to share the latest updates with you.
+        </mj-text>
+        <mj-divider border-color="#eeeeee" />
+        <mj-text>
+          This is a sample MJML template demonstrating how to use listmonk's template
+          variables within MJML. You can use any of the standard template functions:
+        </mj-text>
+        <mj-text>
+          <ul>
+            <li>Subscriber: {{ .Subscriber.Email }}</li>
+            <li>Campaign: {{ .Campaign.Name }}</li>
+          </ul>
+        </mj-text>
+        <mj-button href="{{ TrackLink `https://example.com` }}">
+          Learn More
+        </mj-button>
+      </mj-column>
+    </mj-section>
+
+    <!-- Footer Section -->
+    <mj-section padding="20px 0">
+      <mj-column>
+        <mj-text align="center" font-size="12px" color="#888888">
+          <a href="{{ UnsubscribeURL }}" style="color: #888888;">Unsubscribe</a>
+          &nbsp;&nbsp;|&nbsp;&nbsp;
+          <a href="{{ MessageURL }}" style="color: #888888;">View in browser</a>
+        </mj-text>
+        {{ TrackView }}
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

@@ -59,6 +59,10 @@ export default {
       case 'markdown':
         langs = [markdown()];
         break;
+      case 'mjml':
+        // MJML uses XML/HTML-like syntax, so we use HTML mode
+        langs = [html()];
+        break;
       default:
         langs = [html()];
     }

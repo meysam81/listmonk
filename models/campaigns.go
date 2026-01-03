@@ -29,6 +29,7 @@ const (
 	CampaignContentTypeMarkdown = "markdown"
 	CampaignContentTypePlain    = "plain"
 	CampaignContentTypeVisual   = "visual"
+	CampaignContentTypeMJML     = "mjml"
 )
 
 // Campaigns represents a slice of Campaigns.
@@ -174,6 +175,13 @@ func (c *Campaign) CompileTemplate(f template.FuncMap) error {
 			return err
 		}
 		body = b.String()
+	} else if c.ContentType == CampaignContentTypeMJML {
+		// If the format is MJML, compile MJML to HTML.
+		html, err := CompileMJML(c.Body)
+		if err != nil {
+			return fmt.Errorf("error compiling MJML: %v", err)
+		}
+		body = html
 	} else {
 		body = c.Body
 	}
@@ -210,15 +218,16 @@ func (c *Campaign) CompileTemplate(f template.FuncMap) error {
 }
 
 // ConvertContent converts a campaign's body from one format to another,
-// for example, Markdown to HTML.
+// for example, Markdown to HTML or MJML to HTML.
 func (c *Campaign) ConvertContent(from, to string) (string, error) {
 	body := c.Body
 	for _, r := range regTplFuncs {
 		body = r.regExp.ReplaceAllString(body, r.replace)
 	}
 
-	// If the format is markdown, convert Markdown to HTML.
 	var out string
+
+	// If the format is markdown, convert Markdown to HTML.
 	if from == CampaignContentTypeMarkdown &&
 		(to == CampaignContentTypeHTML || to == CampaignContentTypeRichtext) {
 		var b bytes.Buffer
@@ -226,6 +235,14 @@ func (c *Campaign) ConvertContent(from, to string) (string, error) {
 			return out, err
 		}
 		out = b.String()
+	} else if from == CampaignContentTypeMJML &&
+		(to == CampaignContentTypeHTML || to == CampaignContentTypeRichtext) {
+		// If the format is MJML, compile MJML to HTML.
+		html, err := CompileMJML(c.Body)
+		if err != nil {
+			return out, fmt.Errorf("error compiling MJML: %v", err)
+		}
+		out = html
 	} else {
 		return out, errors.New("unknown formats to convert")
 	}

@@ -11,7 +11,7 @@
           </b-select>
         </b-field>
 
-        <b-field v-if="self.contentType !== 'visual'" :label="$tc('globals.terms.template')" label-position="on-border">
+        <b-field v-if="self.contentType !== 'visual' && self.contentType !== 'mjml'" :label="$tc('globals.terms.template')" label-position="on-border">
           <b-select :placeholder="$t('globals.terms.none')" v-model="templateId" name="template" :disabled="disabled">
             <template v-for="t in validTemplates">
               <option :value="t.id" :key="t.id">
@@ -69,6 +69,9 @@
 
     <!-- markdown editor //-->
     <code-editor lang="markdown" v-if="self.contentType === 'markdown'" v-model="self.body" key="editor-markdown" />
+
+    <!-- mjml editor //-->
+    <code-editor lang="mjml" v-if="self.contentType === 'mjml'" v-model="self.body" key="editor-mjml" />
 
     <!-- plain text //-->
     <b-input v-if="self.contentType === 'plain'" v-model="self.body" type="textarea" name="content" ref="plainEditor"
@@ -206,6 +209,18 @@ export default {
           this.$nextTick(() => {
             // Both type + body should be updated in one cycle to avoid firing
             // multiple events.
+            this.self.contentType = to;
+            this.self.body = this.beautifyHTML(data.trim());
+          });
+        });
+
+        // MJML to HTML requires a backend call.
+      } else if (from === 'mjml' && (to === 'richtext' || to === 'html')) {
+        skip = true;
+        this.$api.convertCampaignContent({
+          id: 1, body, from, to,
+        }).then((data) => {
+          this.$nextTick(() => {
             this.self.contentType = to;
             this.self.body = this.beautifyHTML(data.trim());
           });

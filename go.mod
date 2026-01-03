@@ -1,6 +1,8 @@
 module github.com/knadh/listmonk
 
-go 1.24.1
+go 1.24.4
+
+toolchain go1.24.7
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
@@ -59,6 +61,7 @@ require (
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/pelletier/go-toml v1.9.5 // indirect
+	github.com/preslavrachev/gomjml v0.10.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/spf13/cast v1.9.2 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
